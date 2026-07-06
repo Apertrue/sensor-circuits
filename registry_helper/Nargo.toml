@@ -1,0 +1,6 @@
+[package]
+name = "registry_helper"
+type = "bin"
+authors = ["apertrue"]
+
+[dependencies]
