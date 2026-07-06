@@ -3,12 +3,12 @@
 // Output: [leaf, root, sib0, sib1, sib2, sib3]
 
 global KEY_BITS: u32 = 128;
-global R: u32 = 63;
-global N: u32 = 8064;
+global R: u32 = 7;
+global N: u32 = 896;
 global PACK: u32 = 224;
-global NCHUNK: u32 = 36;
+global NCHUNK: u32 = 4;
 
-fn decode_key(fresh_bits: [bool; 8064], sketch: [bool; 8064]) -> Field {
+fn decode_key(fresh_bits: [bool; 896], sketch: [bool; 896]) -> Field {
     let mut key_field: Field = 0;
     let mut pow: Field = 1;
     for i in 0..KEY_BITS {
@@ -24,10 +24,10 @@ fn decode_key(fresh_bits: [bool; 8064], sketch: [bool; 8064]) -> Field {
     key_field
 }
 
-fn main(fresh_bits: [bool; 8064], sketch: [bool; 8064]) -> pub [Field; 6] {
+fn main(fresh_bits: [bool; 896], sketch: [bool; 896]) -> pub [Field; 6] {
     let key = decode_key(fresh_bits, sketch);
     let commit = std::hash::pedersen_hash([key]);
-    let mut chunks: [Field; 36] = [0; 36];
+    let mut chunks: [Field; 4] = [0; 4];
     for c in 0..NCHUNK {
         let mut acc: Field = 0;
         let mut pow: Field = 1;
