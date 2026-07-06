@@ -1,0 +1,6 @@
+[package]
+name = "prnu_bind_v3"
+type = "bin"
+authors = ["apertrue"]
+
+[dependencies]
