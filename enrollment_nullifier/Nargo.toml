@@ -1,0 +1,7 @@
+[package]
+name = "enrollment_nullifier"
+type = "bin"
+authors = ["apertrue"]
+description = "One-time enrollment: recover a fuzzy device-ID from the stable sensor core and emit a per-registry nullifier for Sybil-resistant registration (CANCELABLE.md OP1)"
+
+[dependencies]
