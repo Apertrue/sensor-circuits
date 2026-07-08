@@ -14,7 +14,7 @@
 // TAU = 0.4965*N = 130,122. At this N impostor FA ~ 2e-4 -- production target is
 // N ~ 1M for FA ~ 1e-12 (same design, bigger loop).
 
-global TAU: u32 = 16265;
+global TAU: u32 = 15534; // 0.475 * N -- SPEC_FROZEN 5 production value (FA ~8e-20)
 global PACK: u32 = 224;
 global NCHUNK: u32 = 146;
 global DEPTH: u32 = 4;
