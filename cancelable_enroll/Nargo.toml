@@ -1,0 +1,7 @@
+[package]
+name = "cancelable_enroll"
+type = "bin"
+authors = ["apertrue"]
+description = "One-time cancelable-PRNU enrollment: binds registry leaf (keyed BioHash template) and Sybil nullifier (device-ID FE) to the SAME private raw fingerprint bits (CANCELABLE.md OP2)"
+
+[dependencies]
