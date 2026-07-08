@@ -39,8 +39,9 @@
 // this circuit takes taps as private witness and leaves the k-commitment
 // to a companion once the key scheme is fixed.
 
-global Z: u32 = 2048;          // raw stability bits (prod 32704)
-global M: u32 = 256;           // template bits (prod 4096)
+global Z: u32 = 32704;         // raw stability bits (PRODUCTION)
+global M: u32 = 1024;          // template bits (BLESSED July 8: ~30 sigma by E1;
+                               // fits key tier 128x7=896; halves proving vs 4096)
 global S: u32 = 15;            // taps per template bit (odd, no ties)
 global DEVICE_ID_BITS: u32 = 64;
 global R_DEV: u32 = 63;
@@ -48,8 +49,8 @@ global CORE_N: u32 = 4032;     // DEVICE_ID_BITS * R_DEV; core = raw_bits prefix
 
 fn main(
     raw_bits: [bool; Z],                // fingerprint bits, +1 -> true (private)
-    taps: [u32; 3840],                  // M*S indices into raw_bits (private)
-    weights: [bool; 3840],              // M*S signs, +1 -> true (private)
+    taps: [u32; 15360],                  // M*S indices into raw_bits (private)
+    weights: [bool; 15360],              // M*S signs, +1 -> true (private)
     core_bits: [bool; CORE_N],          // stable-core bits for the FE (private)
     device_sketch: pub [bool; CORE_N],  // public helper data
     registry_id: pub Field,
