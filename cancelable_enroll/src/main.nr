@@ -23,15 +23,16 @@
 // SIZES: validated at reduced scale here (compile + golden + gate probe);
 // production M=4096, S=15, Z=32704 per the measured transform (E1/E2).
 //
-// SCALING FINDING (July 8, measured two points M=128/256): each dynamic
-// read into raw_bits costs ~45 gates in Noir (NOT the doc's "3-10 gates"
-// for a hand-built ROM), ~36k fixed. Production M=4096 -> 61,440 reads
-// -> ~2.8M gates -- ~7x the doc estimate and > capture_aggregator. This
-// is a one-time ENROLLMENT proof and CANNOT be outsourced (its witness IS
-// the raw fingerprint), so before ship the transform read needs a proper
-// lookup-table (Noir std lookups / precomputed ROM) to reach the doc's
-// estimate, or M reduced (security-margin tradeoff, E1 has 60σ headroom).
-// The MECHANISM is validated; the read-cost is the open optimization.
+// SCALING (July 8, RESOLVED by microbenchmarks): the initial i32
+// multiply-accumulate form cost ~45 gates/tap (projected 2.8M at
+// production); the culprit was SIGNED ARITHMETIC, not the ROM read
+// (pure dynamic bool read = ~10.5 gates incl. counter; ROM is the right
+// primitive, no better library exists). The agreement-count form below
+// measures 8.65 gates/tap + ~4/array-entry init. PRODUCTION projection
+// (Z=32704, M=4096, S=15): ~700k gates ~= one-time ~20 s on phone /
+// ~7 s desktop -- shippable for an enrollment that already takes
+// minutes. If Jamie drops M to 1024 (still 30 sigma by E1), ~300k
+// ~= ~9 s phone. Witness IS the raw fingerprint -> cannot outsource.
 //
 // DESIGN NOTE for Jamie: tap privacy + enclave-key binding scheme (a
 // commitment to k tying taps to the enclave) is the reviewable choice;
@@ -46,28 +47,30 @@ global R_DEV: u32 = 63;
 global CORE_N: u32 = 4032;     // DEVICE_ID_BITS * R_DEV; core = raw_bits prefix... (see note)
 
 fn main(
-    raw_bits: [i32; Z],                 // +/-1 fingerprint bits (private)
+    raw_bits: [bool; Z],                // fingerprint bits, +1 -> true (private)
     taps: [u32; 3840],                  // M*S indices into raw_bits (private)
-    weights: [i32; 3840],               // M*S signs +/-1 (private)
+    weights: [bool; 3840],              // M*S signs, +1 -> true (private)
     core_bits: [bool; CORE_N],          // stable-core bits for the FE (private)
     device_sketch: pub [bool; CORE_N],  // public helper data
     registry_id: pub Field,
 ) -> pub (Field, Field, Field) {
     // ---- 1. keyed BioHash template -> packed leaf ----
-    // template[m] = sign(sum_s weights * raw_bits[taps]); pack sign>=0 as 1.
+    // AGREEMENT-COUNT form of sign(sum_s w*b) over +/-1 values:
+    //   sum = agreements - disagreements = 2*agreements - S
+    //   sum >= 0  <=>  agreements > S/2   (S odd -> no ties)
+    // Boolean equality + counter instead of signed multiply-accumulate:
+    // measured 8.65 gates/tap vs ~45 for the i32 form (July 8 microbench).
     let mut leaf_acc: Field = 0;
     let mut leaf_pow: Field = 1;
     for m in 0..M {
-        let mut acc: i32 = 0;
+        let mut agree: u32 = 0;
         for s in 0..S {
-            let idx = taps[m * S + s];
             // dynamic read into the private raw_bits (ROM table)
-            let bit = raw_bits[idx];
-            acc += weights[m * S + s] * bit;
+            let b = raw_bits[taps[m * S + s]];
+            agree += (b == weights[m * S + s]) as u32;
         }
-        // sign(acc): acc != 0 because S is odd and bits are +/-1.
-        let is_nonneg = (acc >= 0) as u32;
-        leaf_acc += leaf_pow * (is_nonneg as Field);
+        let tbit = (agree > S / 2) as u32;
+        leaf_acc += leaf_pow * (tbit as Field);
         leaf_pow *= 2;
         // reduce every 250 bits to keep the field packing valid
         if (m + 1) % 250 == 0 {
