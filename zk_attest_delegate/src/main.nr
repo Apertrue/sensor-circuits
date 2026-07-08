@@ -123,7 +123,11 @@ fn main(
     for i in 0..32 {
         assert_msg[ASSERT_AD_LEN + i] = binding_hash[i];
     }
-    let assert_digest: [u8; 32] = sha256_var(assert_msg, 69);
+    // Apple signs the NONCE as a message: the ECDSA digest is
+    // SHA256(nonce) = SHA256(SHA256(assertAuthData || clientDataHash))
+    // (verified against a real on-device assertion, July 8).
+    let assert_nonce: [u8; 32] = sha256_var(assert_msg, 69);
+    let assert_digest: [u8; 32] = sha256_var(assert_nonce, 32);
     let mut pk_x: [u8; 32] = [0; 32];
     let mut pk_y: [u8; 32] = [0; 32];
     for i in 0..32 {
