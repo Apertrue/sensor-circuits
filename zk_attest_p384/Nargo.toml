@@ -1,0 +1,9 @@
+[package]
+name = "zk_attest_p384"
+type = "bin"
+authors = ["apertrue"]
+description = "zkAppAttest spike: P-384 ECDSA verify (vendored noir_bigcurve, ported from apertrue beta.18/bb4)"
+
+[dependencies]
+bignum = { tag = "v0.10.0", git = "https://github.com/noir-lang/noir-bignum" }
+poseidon = { tag = "v0.3.0", git = "https://github.com/noir-lang/poseidon" }
