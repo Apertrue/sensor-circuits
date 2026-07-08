@@ -1,0 +1,5 @@
+[package]
+name = "rec_spike_inner"
+type = "bin"
+authors = ["apertrue"]
+[dependencies]
