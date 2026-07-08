@@ -1,66 +1,55 @@
-// Cancelable-PRNU enrollment (CANCELABLE.md OP2, decision 2) -- the
-// one-time proof that makes the Sybil nullifier TRUSTWORTHY by binding it
-// to the same physical fingerprint as the registry leaf.
+// Cancelable-PRNU enrollment (CANCELABLE.md OP2) -- the one-time proof
+// that registers a cancelable TEMPLATE leaf instead of the raw fingerprint.
 //
-// The threat it closes: without this, an adversary registers with their
-// real template leaf L but submits a RANDOM nullifier N, evading duplicate
-// detection. This proof shows L and N derive from ONE witnessed raw-bit
-// array -> the nullifier is provably the sensor's.
+// WHY (survives the Sybil de-scope, CANCELABLE.md 5f): PRNU is present in
+// every published photo, so an adversary can ESTIMATE a target's raw
+// fingerprint from their photos (fingerprint-copy attack). The membership
+// proof takes fresh bits as private input, so what stops a forger is
+// knowledge of a valid PREIMAGE to the enrolled commitment. Registering
+// commit(T_k(bits)) with k enclave-secret means estimated raw bits are
+// useless without k -> forgery blocked. It also gives rotation/burn-notice
+// (leak a template -> rotate k, re-enroll) and cross-registry
+// compartmentalisation (distinct k per registry). None of this is Sybil.
 //
-// Statement (private raw_bits, taps, weights; public leaf, nullifier,
-// device_commitment, device_sketch):
-//   1. LEAF  = commitment to template = keyed BioHash of raw_bits:
-//        template[m] = sign( sum_s weights[m][s] * raw_bits[taps[m][s]] )
-//      Taps/weights are PRIVATE (enclave-derived) -- OP2: public taps would
-//      let raw bits alone recompute templates, breaking compartmentalization.
-//   2. NULLIFIER = device-ID FE over the CORE (a fixed prefix of raw_bits)
-//        with the public device_sketch -> pedersen([device_id, registry_id]).
-//   3. Both read the SAME raw_bits witness -> leaf and nullifier are bound.
+// Statement (private raw_bits, taps, weights; public leaf):
+//   LEAF = commitment to template = keyed BioHash of raw_bits:
+//     template[m] = sign( sum_s weights[m][s] * raw_bits[taps[m][s]] )
+//   Taps/weights are PRIVATE (enclave-derived) -- OP2: public taps would
+//   let raw bits alone recompute templates, breaking compartmentalisation.
 //
 // Verification proofs (every photo) stay the UNCHANGED v1/v2/v3 circuits
 // fed template bits off-circuit; only THIS enrollment proof is heavier.
 //
-// SIZES: validated at reduced scale here (compile + golden + gate probe);
-// production M=4096, S=15, Z=32704 per the measured transform (E1/E2).
+// SCALING (July 8, microbenchmarks): the agreement-count form is 8.65
+// gates/tap (the i32 multiply-accumulate was ~45 -- signed-arith range
+// checks, not the ROM read). PRODUCTION M=1024 measured 290,534 gates
+// with the device-ID half; template-only is smaller. Witness IS the raw
+// fingerprint -> cannot outsource; one-time at enrollment (~seconds).
 //
-// SCALING (July 8, RESOLVED by microbenchmarks): the initial i32
-// multiply-accumulate form cost ~45 gates/tap (projected 2.8M at
-// production); the culprit was SIGNED ARITHMETIC, not the ROM read
-// (pure dynamic bool read = ~10.5 gates incl. counter; ROM is the right
-// primitive, no better library exists). The agreement-count form below
-// measures 8.65 gates/tap + ~4/array-entry init. PRODUCTION projection
-// (Z=32704, M=4096, S=15): ~700k gates ~= one-time ~20 s on phone /
-// ~7 s desktop -- shippable for an enrollment that already takes
-// minutes. If Jamie drops M to 1024 (still 30 sigma by E1), ~300k
-// ~= ~9 s phone. Witness IS the raw fingerprint -> cannot outsource.
+// DESIGN NOTE for Jamie: tap privacy + enclave-key binding (a commitment
+// to k tying taps to the enclave) is the reviewable choice; this circuit
+// takes taps as private witness and leaves the k-commitment to a companion
+// once the key scheme is fixed.
 //
-// DESIGN NOTE for Jamie: tap privacy + enclave-key binding scheme (a
-// commitment to k tying taps to the enclave) is the reviewable choice;
-// this circuit takes taps as private witness and leaves the k-commitment
-// to a companion once the key scheme is fixed.
+// Sybil de-scoped (CANCELABLE.md 5f): the device-ID FE + nullifier were
+// removed -- device-uniqueness is out of scope (fingerprint canonicalisation
+// can't give it, and it isn't needed for the core claim). This circuit is
+// now template-registration only.
 
 global Z: u32 = 32704;         // raw stability bits (PRODUCTION)
 global M: u32 = 1024;          // template bits (BLESSED July 8: ~30 sigma by E1;
                                // fits key tier 128x7=896; halves proving vs 4096)
 global S: u32 = 15;            // taps per template bit (odd, no ties)
-global DEVICE_ID_BITS: u32 = 64;
-global R_DEV: u32 = 63;
-global CORE_N: u32 = 4032;     // DEVICE_ID_BITS * R_DEV; core = raw_bits prefix... (see note)
 
 fn main(
-    raw_bits: [bool; Z],                // fingerprint bits, +1 -> true (private)
-    taps: [u32; 15360],                  // M*S indices into raw_bits (private)
-    weights: [bool; 15360],              // M*S signs, +1 -> true (private)
-    core_bits: [bool; CORE_N],          // stable-core bits for the FE (private)
-    device_sketch: pub [bool; CORE_N],  // public helper data
-    registry_id: pub Field,
-) -> pub (Field, Field, Field) {
-    // ---- 1. keyed BioHash template -> packed leaf ----
+    raw_bits: [bool; Z],            // fingerprint bits, +1 -> true (private)
+    taps: [u32; 15360],            // M*S indices into raw_bits (private)
+    weights: [bool; 15360],        // M*S signs, +1 -> true (private)
+) -> pub Field {
+    // keyed BioHash template -> packed leaf.
     // AGREEMENT-COUNT form of sign(sum_s w*b) over +/-1 values:
-    //   sum = agreements - disagreements = 2*agreements - S
-    //   sum >= 0  <=>  agreements > S/2   (S odd -> no ties)
-    // Boolean equality + counter instead of signed multiply-accumulate:
-    // measured 8.65 gates/tap vs ~45 for the i32 form (July 8 microbench).
+    //   sum = 2*agreements - S ;  sum >= 0  <=>  agreements > S/2  (S odd).
+    // Boolean equality + counter, no signed arithmetic (5x cheaper).
     let mut leaf_acc: Field = 0;
     let mut leaf_pow: Field = 1;
     for m in 0..M {
@@ -79,24 +68,5 @@ fn main(
             leaf_pow = 1;
         }
     }
-    let leaf = std::hash::pedersen_hash([leaf_acc]);
-
-    // ---- 2. device-ID FE over the core -> nullifier ----
-    let mut id_field: Field = 0;
-    let mut pow: Field = 1;
-    for i in 0..DEVICE_ID_BITS {
-        let mut count: u32 = 0;
-        for j in 0..R_DEV {
-            let x = device_sketch[i * R_DEV + j] ^ core_bits[i * R_DEV + j];
-            count += x as u32;
-        }
-        let bit = (count > (R_DEV / 2)) as u32;
-        id_field += pow * (bit as Field);
-        pow *= 2;
-    }
-    let nullifier = std::hash::pedersen_hash([id_field, registry_id]);
-    let device_commitment = std::hash::pedersen_hash([id_field]);
-
-    // 3. leaf and nullifier both consumed raw_bits/core_bits from one witness.
-    (leaf, nullifier, device_commitment)
+    std::hash::pedersen_hash([leaf_acc])
 }
