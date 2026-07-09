@@ -41,17 +41,28 @@ global M: u32 = 1024;          // template bits (BLESSED July 8: ~30 sigma by E1
                                // fits key tier 128x7=896; halves proving vs 4096)
 global S: u32 = 15;            // taps per template bit (odd, no ties)
 
+// v2 registry-leaf constants -- MUST mirror circuits/registry_helper exactly:
+// the point of the 2026-07-09 rewire is that the public output below IS the
+// leaf sitting in the verifier's registry, so this proof speaks about the
+// REGISTERED value, not a free-floating template commitment.
+global KEY_BITS: u32 = 128;
+global R: u32 = 7;
+global N_KEY: u32 = 896;       // KEY_BITS * R; template[0..896] feeds the FE
+global PACK: u32 = 224;
+global NCHUNK: u32 = 4;
+
 fn main(
     raw_bits: [bool; Z],            // fingerprint bits, +1 -> true (private)
     taps: [u32; 15360],            // M*S indices into raw_bits (private)
     weights: [bool; 15360],        // M*S signs, +1 -> true (private)
+    sketch: [bool; N_KEY],         // code-offset sketch over template[0..896]
+                                   // (private; its hash is bound inside leaf)
 ) -> pub Field {
-    // keyed BioHash template -> packed leaf.
+    // 1. keyed BioHash template.
     // AGREEMENT-COUNT form of sign(sum_s w*b) over +/-1 values:
     //   sum = 2*agreements - S ;  sum >= 0  <=>  agreements > S/2  (S odd).
     // Boolean equality + counter, no signed arithmetic (5x cheaper).
-    let mut leaf_acc: Field = 0;
-    let mut leaf_pow: Field = 1;
+    let mut template: [bool; M] = [false; M];
     for m in 0..M {
         let mut agree: u32 = 0;
         for s in 0..S {
@@ -59,14 +70,36 @@ fn main(
             let b = raw_bits[taps[m * S + s]];
             agree += (b == weights[m * S + s]) as u32;
         }
-        let tbit = (agree > S / 2) as u32;
-        leaf_acc += leaf_pow * (tbit as Field);
-        leaf_pow *= 2;
-        // reduce every 250 bits to keep the field packing valid
-        if (m + 1) % 250 == 0 {
-            leaf_acc = std::hash::pedersen_hash([leaf_acc]);
-            leaf_pow = 1;
-        }
+        template[m] = agree > S / 2;
     }
-    std::hash::pedersen_hash([leaf_acc])
+
+    // 2. the REGISTERED v2 leaf from that template -- byte-for-byte the
+    // registry_helper computation: decode the key from template[0..896] vs
+    // the sketch (r=7 majority), commit the key, hash the sketch chunks,
+    // leaf = H(commit, sketch_hash).
+    let mut key_field: Field = 0;
+    let mut pow: Field = 1;
+    for i in 0..KEY_BITS {
+        let mut count: u32 = 0;
+        for j in 0..R {
+            let x = sketch[i * R + j] ^ template[i * R + j];
+            count += x as u32;
+        }
+        let bit = (count > (R / 2)) as u32;
+        key_field += pow * (bit as Field);
+        pow *= 2;
+    }
+    let commit = std::hash::pedersen_hash([key_field]);
+    let mut chunks: [Field; NCHUNK] = [0; NCHUNK];
+    for c in 0..NCHUNK {
+        let mut acc: Field = 0;
+        let mut cpow: Field = 1;
+        for j in 0..PACK {
+            acc += cpow * (sketch[c * PACK + j] as Field);
+            cpow *= 2;
+        }
+        chunks[c] = acc;
+    }
+    let sketch_hash = std::hash::pedersen_hash(chunks);
+    std::hash::pedersen_hash([commit, sketch_hash])
 }
