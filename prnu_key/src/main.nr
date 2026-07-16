@@ -33,7 +33,7 @@ fn main(fresh_bits: [bool; 896], sketch: pub [bool; 896]) -> pub Field {
             let x = sketch[i * R + j] ^ fresh_bits[i * R + j];
             count += x as u32;
         }
-        // majority vote: >31 of 63 flips means the key bit is 1
+        // majority vote: > R/2 flips (> 3 of R=7) means the key bit is 1
         let bit = (count > (R / 2)) as u32;
         key_field += pow * (bit as Field);
         pow *= 2;

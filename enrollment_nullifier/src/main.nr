@@ -16,6 +16,16 @@
 //   3. device_commitment = pedersen([device_id]) -- ties this proof to a
 //      claimed identity the registry can also carry.
 //
+// NOTE (de-scoped, measured 2026-07-09): step 1's cross-enrollment device-ID
+// recovery was measured DEAD on hardware -- two enrolments of the SAME sensor
+// linked at BER ~0.451 (chance), because the core is ordered by each
+// enrolment's own stability ranking (position i is a different pixel each
+// time). So this proof does NOT provide cross-enrollment identity or real
+// Sybil resistance: it gives verbatim-duplicate refusal + rotation only, and
+// duplicate/Sybil policy is layered on the enrolment attestation instead. The
+// 64-bit device-ID is also below cryptographic margin. Not load-bearing in the
+// shipped system (registration is near-open in the MVP; see paperB threat model).
+//
 // PARAMETERS from the July-7 measurement (OP1): core >= 4096, r >= 63,
 // device-ID 64 bits.  Set as globals -- Jamie's final calibration only
 // changes these constants.  Defaults below are the measured-safe values
