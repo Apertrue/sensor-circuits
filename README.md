@@ -40,7 +40,7 @@ flowchart TB
     V --> G["capture_aggregator<br/>one recursive proof"]
     Z --> G
   end
-  R -. "public root" .-> V
+  R -.->|public root| V
   G --> VER{{"Browser verify"}}
 ```
 
